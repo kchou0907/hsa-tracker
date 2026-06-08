@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#12372a">
+  <title>HSA Receipt Vault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="HSA Receipt Vault">
+        <span class="brand-mark">H</span>
+        <span>
+          <strong>HSA Vault</strong>
+          <small>Receipt ledger</small>
+        </span>
+      </a>
+
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">01</span> Overview
+        </button>
+        <button class="nav-item" data-view="receipts">
+          <span class="nav-icon">02</span> All receipts
+          <span class="nav-count" id="navReceiptCount">0</span>
+        </button>
+        <button class="nav-item" data-view="reimburse">
+          <span class="nav-icon">03</span> Build reimbursement
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="drive-card">
+          <div class="drive-status-row">
+            <span class="status-dot" id="driveStatusDot"></span>
+            <strong id="driveStatusText">Drive not configured</strong>
+          </div>
+          <p id="driveFolderName">Choose where receipt files should live.</p>
+          <button class="text-button" id="openSettingsButton">Configure Drive</button>
+        </div>
+        <p class="privacy-note">Your receipt ledger stays in this browser.</p>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="pageEyebrow">Your HSA archive</p>
+          <h1 id="pageTitle">Receipt overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="settingsButton" aria-label="Settings" title="Settings">Settings</button>
+          <button class="primary-button" id="addReceiptButton"><span>+</span> Add receipt</button>
+        </div>
+      </header>
+
+      <section class="view active" id="dashboardView">
+        <div class="hero-card">
+          <div class="hero-copy">
+            <p class="eyebrow light">Ready when you need it</p>
+            <h2><span id="availableTotal">$0.00</span> in documented expenses</h2>
+            <p>Every saved receipt is a future tax-free reimbursement you can call on.</p>
+            <button class="light-button" data-go-to="reimburse">Find receipts for an amount</button>
+          </div>
+          <div class="hero-orbit" aria-hidden="true">
+            <div class="orbit-ring ring-one"></div>
+            <div class="orbit-ring ring-two"></div>
+            <div class="hero-amount">
+              <span>Available</span>
+              <strong id="availableCount">0</strong>
+              <small>receipts</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">All documented</span>
+            <strong id="documentedTotal">$0.00</strong>
+            <small id="documentedCaption">Across 0 receipts</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Already reimbursed</span>
+            <strong id="reimbursedTotal">$0.00</strong>
+            <small id="reimbursedCaption">Nothing claimed yet</small>
+          </article>
+          <article class="stat-card accent-stat">
+            <span class="stat-label">Largest available receipt</span>
+            <strong id="largestReceipt">$0.00</strong>
+            <small id="largestCaption">Add your first receipt</small>
+          </article>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Recently added</p>
+                <h3>Latest receipts</h3>
+              </div>
+              <button class="text-button" data-go-to="receipts">View all</button>
+            </div>
+            <div id="recentReceipts" class="receipt-stack"></div>
+          </section>
+          <section class="panel guide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Quick start</p>
+                <h3>Your receipt habit</h3>
+              </div>
+            </div>
+            <ol class="steps-list">
+              <li><span>1</span><div><strong>Add the expense</strong><p>Note the date, provider, and amount.</p></div></li>
+              <li><span>2</span><div><strong>Store the proof</strong><p>Upload the receipt to your Drive folder.</p></div></li>
+              <li><span>3</span><div><strong>Reimburse later</strong><p>Ask for an amount and get the right receipt set.</p></div></li>
+            </ol>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="receiptsView">
+        <div class="toolbar">
+          <label class="search-field">
+            <span>Search</span>
+            <input id="receiptSearch" type="search" placeholder="Provider, note, or amount">
+          </label>
+          <select id="receiptFilter" aria-label="Filter receipts">
+            <option value="all">All receipts</option>
+            <option value="available">Available</option>
+            <option value="reimbursed">Reimbursed</option>
+          </select>
+          <select id="receiptSort" aria-label="Sort receipts">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="high">Highest amount</option>
+            <option value="low">Lowest amount</option>
+          </select>
+        </div>
+        <section class="panel table-panel">
+          <div class="receipt-table-header">
+            <span>Receipt</span><span>Date</span><span>Status</span><span>Amount</span><span></span>
+          </div>
+          <div id="receiptTable"></div>
+        </section>
+      </section>
+
+      <section class="view" id="reimburseView">
+        <div class="reimburse-layout">
+          <section class="reimburse-builder">
+            <p class="eyebrow">Receipt matcher</p>
+            <h2>How much do you need?</h2>
+            <p class="section-intro">We will find available receipts that add up exactly, or get as close as possible.</p>
+            <form id="matchForm" class="amount-form">
+              <label for="targetAmount">Target reimbursement</label>
+              <div class="large-money-input">
+                <span>$</span>
+                <input id="targetAmount" type="number" min="0.01" step="0.01" placeholder="123.00" required>
+              </div>
+              <div class="match-preference">
+                <label><input type="radio" name="matchPreference" value="closest" checked> Closest overall</label>
+                <label><input type="radio" name="matchPreference" value="under"> Do not exceed target</label>
+                <label><input type="radio" name="matchPreference" value="over"> Meet or exceed target</label>
+              </div>
+              <button class="primary-button wide" type="submit">Find matching receipts</button>
+            </form>
+            <div class="available-callout">
+              <span>Total currently available</span>
+              <strong id="matcherAvailableTotal">$0.00</strong>
+            </div>
+          </section>
+
+          <section class="match-results" id="matchResults">
+            <div class="empty-state large">
+              <span class="empty-symbol">=</span>
+              <h3>Your receipt set will appear here</h3>
+              <p>Enter a target to build a reimbursement from your available expenses.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="receiptDialog" class="app-dialog">
+    <form id="receiptForm" method="dialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Document an expense</p><h2 id="receiptDialogTitle">Add receipt</h2></div>
+        <button class="close-button" type="button" data-close-dialog="receiptDialog" aria-label="Close">x</button>
+      </div>
+      <input type="hidden" id="receiptId">
+      <div class="form-grid">
+        <label class="full">Provider or merchant<input id="provider" required placeholder="e.g. Lakeside Dental"></label>
+        <label>Amount<div class="money-input"><span>$</span><input id="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div></label>
+        <label>Date of service<input id="serviceDate" type="date" required></label>
+        <label class="full">Notes<textarea id="notes" rows="3" placeholder="Optional details about this expense"></textarea></label>
+        <label class="full file-drop" id="fileDrop">
+          <input id="receiptFile" type="file" accept="image/*,.pdf">
+          <span class="file-drop-icon">+</span>
+          <strong id="fileDropTitle">Attach receipt file</strong>
+          <small id="fileDropCaption">PDF, JPG, or PNG. Uploaded to Drive when connected.</small>
+        </label>
+        <label class="checkbox-label full"><input id="isReimbursed" type="checkbox"> This expense has already been reimbursed</label>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog="receiptDialog">Cancel</button>
+        <button class="primary-button" type="submit" id="saveReceiptButton">Save receipt</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="app-dialog">
+    <form id="settingsForm" method="dialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Receipt storage</p><h2>Google Drive settings</h2></div>
+        <button class="close-button" type="button" data-close-dialog="settingsDialog" aria-label="Close">x</button>
+      </div>
+      <div class="settings-explainer">
+        Files upload directly from this browser to the folder you choose. Your OAuth client ID is saved only in this browser.
+      </div>
+      <div class="form-grid">
+        <label class="full">Google Drive folder link or ID<input id="driveFolderInput" placeholder="https://drive.google.com/drive/folders/..."></label>
+        <label class="full">Google OAuth client ID<input id="clientIdInput" placeholder="...apps.googleusercontent.com"></label>
+      </div>
+      <details class="setup-details">
+        <summary>How to create an OAuth client ID</summary>
+        <ol>
+          <li>In Google Cloud Console, enable the Google Drive API.</li>
+          <li>Create an OAuth 2.0 Web application client.</li>
+          <li>Add this app's origin to Authorized JavaScript origins.</li>
+          <li>Paste the client ID above. No client secret is needed.</li>
+        </ol>
+      </details>
+      <div class="data-tools">
+        <button class="secondary-button" type="button" id="exportButton">Export ledger</button>
+        <label class="secondary-button import-button">Import ledger<input id="importInput" type="file" accept=".json"></label>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" id="connectDriveButton">Connect Google Drive</button>
+        <button class="primary-button" type="submit">Save settings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
