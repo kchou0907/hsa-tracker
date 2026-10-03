@@ -6,7 +6,7 @@ A mobile-friendly Google Apps Script web app for long-term HSA receipt storage a
 This version supports:
 
 - receipt photo upload from your phone
-- expense amount / date / label / notes
+- HSA-eligible amount / date / label / notes
 - Google Drive storage for original files
 - Google Sheets ledger + audit trail
 - reimbursement matching by closest total
@@ -175,16 +175,22 @@ Useful document types include:
 
 ### Reimburse
 
-Enter a dollar amount and the app finds receipt combinations closest to that target.
+Enter the amount you want to reimburse.
 
-Matching behavior:
+The app supports **partial reimbursements**. If your unreimbursed eligible expenses total at least the requested amount, it can hit the target exactly by using whole receipt balances and, when necessary, only part of the final receipt.
 
-1. closest absolute difference
-2. if tied, prefer totals at or above target
-3. if still tied, prefer fewer receipts
+Example:
 
-For ordinary search sizes this is exact to the cent.  
-For unusually large search spaces it falls back to a deterministic heuristic so the web app stays responsive.
+```text
+Requested reimbursement: $100
+
+Receipt A remaining: $72  → apply $72
+Receipt B remaining: $81  → apply $28
+
+Receipt B remains available for $53 later.
+```
+
+If the total remaining across all eligible expenses is less than the request, the app allocates everything still available and shows the shortfall.
 
 ### Redeem / reimburse
 
@@ -210,10 +216,10 @@ Important columns include:
 - `Expense ID`
 - `Amount`
 - `Receipt URL`
-- `Original Cents`
+- `Original Cents` — the HSA-eligible amount entered for the expense
 - `Reimbursed Cents`
 - `Remaining Cents`
-- `Status`
+- `Status` — `AVAILABLE`, `PARTIAL`, or `REIMBURSED`
 
 ### `Documents`
 
