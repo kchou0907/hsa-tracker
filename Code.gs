@@ -150,7 +150,7 @@ function computeDashboardData_() {
   rows.forEach(function(row) {
     const remainingCents = Number(row[11] || 0);
     const status = String(row[12] || '');
-    if (remainingCents > 0 && status === 'AVAILABLE') {
+    if (remainingCents > 0) {
       availableCents += remainingCents;
       availableCount += 1;
     }
@@ -336,19 +336,95 @@ function findMatches(requestedAmount) {
   const settings = getSettings_();
   const optionCount = Math.max(1, Math.min(5, Number(settings.MATCH_OPTION_COUNT || 3)));
 
-  const items = expenses.slice().sort(function(a, b) {
-    if (b.remainingCents !== a.remainingCents) return b.remainingCents - a.remainingCents;
-    return new Date(a.date).getTime() - new Date(b.date).getTime();
+  // Partial reimbursement means we can hit the requested amount exactly whenever
+  // total unreimbursed HSA-eligible expenses are at least the target. The final
+  // receipt in a plan may be consumed only partially.
+  const orderings = [
+    expenses.slice().sort(function(a, b) {
+      if (b.remainingCents !== a.remainingCents) return b.remainingCents - a.remainingCents;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    }),
+    expenses.slice().sort(function(a, b) {
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return b.remainingCents - a.remainingCents;
+    }),
+    expenses.slice().sort(function(a, b) {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return b.remainingCents - a.remainingCents;
+    }),
+  ];
+
+  const seen = new Set();
+  const matches = [];
+
+  orderings.forEach(function(order) {
+    const match = buildAllocationMatch_(order, targetCents);
+    if (!match || !match.allocations.length) return;
+
+    const key = match.allocations
+      .map(function(a) { return a.expenseId + ':' + a.appliedCents; })
+      .join('|');
+
+    if (seen.has(key)) return;
+    seen.add(key);
+    matches.push(match);
   });
 
-  const largest = Math.max.apply(null, items.map(function(x) { return x.remainingCents; }));
-  const maxSum = targetCents + largest;
+  matches.sort(function(a, b) {
+    if (a.differenceCents !== b.differenceCents) {
+      return Math.abs(a.differenceCents) - Math.abs(b.differenceCents);
+    }
+    if (a.receipts.length !== b.receipts.length) {
+      return a.receipts.length - b.receipts.length;
+    }
+    return 0;
+  });
 
-  if (maxSum <= 1000000 && items.length <= 200) {
-    return exactMatches_(items, targetCents, optionCount);
+  return matches.slice(0, optionCount);
+}
+
+function buildAllocationMatch_(orderedExpenses, targetCents) {
+  let stillNeeded = targetCents;
+  const allocations = [];
+  const receipts = [];
+
+  for (let i = 0; i < orderedExpenses.length && stillNeeded > 0; i++) {
+    const expense = orderedExpenses[i];
+    const appliedCents = Math.min(expense.remainingCents, stillNeeded);
+    if (appliedCents <= 0) continue;
+
+    allocations.push({
+      expenseId: expense.id,
+      appliedCents: appliedCents,
+    });
+
+    receipts.push({
+      id: expense.id,
+      date: formatDate_(expense.date),
+      appliedCents: appliedCents,
+      availableCents: expense.remainingCents,
+      provider: expense.provider || '',
+      label: expense.label || '',
+      receiptUrl: expense.receiptUrl || '',
+      isPartial: appliedCents < expense.remainingCents,
+    });
+
+    stillNeeded -= appliedCents;
   }
 
-  return heuristicMatches_(items, targetCents, optionCount);
+  const matchedCents = targetCents - stillNeeded;
+
+  return {
+    totalCents: matchedCents,
+    requestedCents: targetCents,
+    differenceCents: matchedCents - targetCents,
+    approximate: false,
+    allocations: allocations,
+    expenseIds: allocations.map(function(a) { return a.expenseId; }),
+    receipts: receipts,
+  };
 }
 
 function redeemMatch(payload) {
@@ -356,12 +432,29 @@ function redeemMatch(payload) {
   lock.waitLock(30000);
 
   try {
-    if (!payload || !Array.isArray(payload.expenseIds) || !payload.expenseIds.length) {
-      throw new Error('No receipts selected.');
+    if (!payload || !Array.isArray(payload.allocations) || !payload.allocations.length) {
+      throw new Error('No reimbursement allocations selected.');
     }
 
     const requestedCents = Number(payload.requestedCents || 0);
-    const wantedIds = new Set(payload.expenseIds);
+    if (!Number.isInteger(requestedCents) || requestedCents <= 0) {
+      throw new Error('Invalid requested reimbursement amount.');
+    }
+
+    const allocationMap = new Map();
+    payload.allocations.forEach(function(allocation) {
+      const expenseId = String(allocation.expenseId || '');
+      const appliedCents = Number(allocation.appliedCents || 0);
+
+      if (!expenseId || !Number.isInteger(appliedCents) || appliedCents <= 0) {
+        throw new Error('Invalid reimbursement allocation.');
+      }
+      if (allocationMap.has(expenseId)) {
+        throw new Error('Duplicate expense in reimbursement allocation.');
+      }
+
+      allocationMap.set(expenseId, appliedCents);
+    });
 
     const ss = getSpreadsheet_();
     const expensesSheet = ss.getSheetByName(SHEETS.EXPENSES);
@@ -369,33 +462,45 @@ function redeemMatch(payload) {
     if (lastRow < 2) throw new Error('No expenses found.');
 
     const rows = expensesSheet.getRange(2, 1, lastRow - 1, EXPENSE_HEADERS.length).getValues();
-
     const selected = [];
+
     rows.forEach(function(row, idx) {
       const id = String(row[0] || '');
-      if (!wantedIds.has(id)) return;
+      if (!allocationMap.has(id)) return;
 
       const remainingCents = Number(row[11] || 0);
       const status = String(row[12] || '');
-      if (remainingCents <= 0 || status !== 'AVAILABLE') {
+      const appliedCents = allocationMap.get(id);
+
+      if (remainingCents <= 0 || status === 'REIMBURSED') {
         throw new Error('Receipt ' + id + ' is no longer available. Refresh and try again.');
+      }
+      if (appliedCents > remainingCents) {
+        throw new Error('Receipt ' + id + ' no longer has enough unreimbursed balance. Refresh and try again.');
       }
 
       selected.push({
         sheetRow: idx + 2,
         id: id,
+        appliedCents: appliedCents,
         remainingCents: remainingCents,
         receiptUrl: String(row[7] || ''),
-        originalCents: Number(row[9] || 0),
         reimbursedCents: Number(row[10] || 0),
       });
     });
 
-    if (selected.length !== wantedIds.size) {
+    if (selected.length !== allocationMap.size) {
       throw new Error('One or more selected receipts could not be found.');
     }
 
-    const matchedCents = selected.reduce(function(sum, x) { return sum + x.remainingCents; }, 0);
+    const matchedCents = selected.reduce(function(sum, x) {
+      return sum + x.appliedCents;
+    }, 0);
+
+    if (matchedCents > requestedCents) {
+      throw new Error('Reimbursement allocations exceed the requested amount.');
+    }
+
     const reimbursementId = makeId_('RMB');
     const now = new Date();
 
@@ -415,8 +520,8 @@ function redeemMatch(payload) {
       return [
         reimbursementId,
         x.id,
-        x.remainingCents / 100,
-        x.remainingCents,
+        x.appliedCents / 100,
+        x.appliedCents,
         x.receiptUrl,
       ];
     });
@@ -426,11 +531,14 @@ function redeemMatch(payload) {
     itemSheet.getRange(itemStart, 1, itemRows.length, ITEM_HEADERS.length).setValues(itemRows);
 
     selected.forEach(function(x) {
-      const newReimbursed = x.reimbursedCents + x.remainingCents;
+      const newReimbursed = x.reimbursedCents + x.appliedCents;
+      const newRemaining = x.remainingCents - x.appliedCents;
+      const newStatus = newRemaining === 0 ? 'REIMBURSED' : 'PARTIAL';
+
       expensesSheet.getRange(x.sheetRow, 11, 1, 4).setValues([[
         newReimbursed,
-        0,
-        'REIMBURSED',
+        newRemaining,
+        newStatus,
         reimbursementId,
       ]]);
     });
@@ -718,7 +826,7 @@ function getAvailableExpenses_() {
       status: String(row[12] || ''),
     };
   }).filter(function(x) {
-    return x.id && x.remainingCents > 0 && x.status === 'AVAILABLE';
+    return x.id && x.remainingCents > 0 && x.status !== 'REIMBURSED';
   });
 }
 
