@@ -254,8 +254,9 @@
 
         <div class="row">
           <div>
-            <label>Amount</label>
+            <label>HSA-eligible amount</label>
             <input id="amount" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="42.18">
+            <div class="subtle" style="margin-top:5px">Enter the amount you can actually reimburse from your HSA.</div>
           </div>
           <div>
             <label>Expense date</label>
@@ -295,7 +296,7 @@
         <label>How much money do you need?</label>
         <input id="requestedAmount" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="500.00">
         <div style="height:14px"></div>
-        <button id="findButton" class="primary" onclick="findMatches()">Find closest matches</button>
+        <button id="findButton" class="primary" onclick="findMatches()">Build reimbursement</button>
         <div id="findStatus" class="status"></div>
         <div class="note">
           “Reimburse” here only updates your receipt ledger. It does not initiate a withdrawal from your HSA provider.
@@ -445,7 +446,7 @@
           <div class="recent-row">
             <div>
               <div>${name}
-                ${r.status === 'AVAILABLE' ? '<span class="pill">available</span>' : ''}
+                ${r.remainingCents > 0 ? `<span class="pill">${r.status === 'PARTIAL' ? 'partial' : 'available'}</span>` : ''}
               </div>
               <div class="subtle">${escapeHtml(subtitle)}</div>
               <div class="inline-actions" style="margin-top:10px">
@@ -455,6 +456,9 @@
             </div>
             <div style="text-align:right">
               <div>${money(r.amountCents)}</div>
+              ${r.remainingCents > 0 && r.remainingCents !== r.amountCents
+                ? `<div class="subtle">${money(r.remainingCents)} remaining</div>`
+                : ''}
               ${r.receiptUrl ? `<a href="${escapeAttr(r.receiptUrl)}" target="_blank" class="subtle">receipt</a>` : ''}
             </div>
           </div>
@@ -796,13 +800,13 @@
       google.script.run
         .withSuccessHandler(function(matches) {
           button.disabled = false;
-          button.textContent = 'Find closest matches';
+          button.textContent = 'Build reimbursement';
           currentMatches = matches || [];
           renderMatches();
         })
         .withFailureHandler(function(err) {
           button.disabled = false;
-          button.textContent = 'Find closest matches';
+          button.textContent = 'Build reimbursement';
           setStatus('findStatus', errorMessage(err), 'error');
         })
         .findMatches(amount);
@@ -842,7 +846,10 @@
                       <div class="meta">${escapeHtml(subtitle)}</div>
                     </div>
                     <div style="text-align:right">
-                      <div>${money(r.amountCents)}</div>
+                      <div>${money(r.appliedCents)}</div>
+                      ${r.isPartial
+                        ? `<div class="meta">of ${money(r.availableCents)} remaining</div>`
+                        : ''}
                       ${r.receiptUrl ? `<a href="${escapeAttr(r.receiptUrl)}" target="_blank" class="meta">view receipt</a>` : ''}
                     </div>
                   </div>
@@ -892,7 +899,7 @@
           refreshDashboard();
         })
         .redeemMatch({
-          expenseIds: match.expenseIds,
+          allocations: match.allocations,
           requestedCents: match.requestedCents,
           notes: ''
         });
