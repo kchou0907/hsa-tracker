@@ -2,6 +2,16 @@ const PROP_KEYS = {
   SPREADSHEET_ID: 'SPREADSHEET_ID',
 };
 
+const CACHE_KEYS = {
+  DASHBOARD: 'dashboard-v2',
+  SETTINGS: 'settings-v2',
+};
+
+const DASHBOARD_CACHE_SECONDS = 300;
+const SETTINGS_CACHE_SECONDS = 3600;
+
+let spreadsheetHandle_ = null;
+
 const SHEETS = {
   EXPENSES: 'Expenses',
   REIMBURSEMENTS: 'Reimbursements',
@@ -84,6 +94,8 @@ function setup(spreadsheetId) {
 
   ensureSchema_();
   const folderInfo = ensureFoldersConfigured_();
+  invalidateRuntimeCaches_();
+  getDashboardData();
 
   return {
     ok: true,
@@ -93,9 +105,6 @@ function setup(spreadsheetId) {
 }
 
 function doGet() {
-  ensureSchema_();
-  ensureFoldersConfigured_();
-
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('HSA Receipt Tracker')
@@ -103,51 +112,67 @@ function doGet() {
 }
 
 function getAppBootstrap() {
-  ensureSchema_();
-  const folderInfo = ensureFoldersConfigured_();
-  const dashboard = getDashboardData();
-
   return {
     configured: true,
-    spreadsheetId: getSpreadsheet_().getId(),
-    folderInfo: folderInfo,
-    dashboard: dashboard,
+    dashboard: getDashboardData(),
   };
 }
 
 function getDashboardData() {
-  ensureSchema_();
-  const expenses = getAvailableExpenses_();
-  const availableCents = expenses.reduce(function(sum, e) { return sum + e.remainingCents; }, 0);
-
-  const ss = getSpreadsheet_();
-  const sheet = ss.getSheetByName(SHEETS.EXPENSES);
-  const lastRow = sheet.getLastRow();
-  const docCountMap = buildDocumentCountMap_();
-  let recent = [];
-
-  if (lastRow > 1) {
-    const start = Math.max(2, lastRow - 14);
-    const rows = sheet.getRange(start, 1, lastRow - start + 1, EXPENSE_HEADERS.length).getValues();
-    recent = rows.reverse().map(function(row) {
-      const id = String(row[0] || '');
-      return {
-        id: id,
-        date: formatDate_(row[1]),
-        amountCents: Number(row[9] || 0),
-        remainingCents: Number(row[11] || 0),
-        provider: String(row[3] || ''),
-        label: String(row[4] || ''),
-        receiptUrl: String(row[7] || ''),
-        status: String(row[12] || ''),
-        documentCount: Number(docCountMap[id] || 0),
-      };
-    }).filter(function(x) { return x.id; });
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(CACHE_KEYS.DASHBOARD);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      // Ignore a malformed cache entry and rebuild it from the sheet.
+    }
   }
+
+  const dashboard = computeDashboardData_();
+  cache.put(CACHE_KEYS.DASHBOARD, JSON.stringify(dashboard), DASHBOARD_CACHE_SECONDS);
+  return dashboard;
+}
+
+function computeDashboardData_() {
+  const sheet = getSpreadsheet_().getSheetByName(SHEETS.EXPENSES);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return { availableCents: 0, availableCount: 0, recent: [] };
+  }
+
+  // One sheet read supplies both the running total and recent-receipt list.
+  // The old path read Expenses twice and ExpenseDocuments once on every launch.
+  const rows = sheet.getRange(2, 1, lastRow - 1, EXPENSE_HEADERS.length).getValues();
+  let availableCents = 0;
+  let availableCount = 0;
+
+  rows.forEach(function(row) {
+    const remainingCents = Number(row[11] || 0);
+    const status = String(row[12] || '');
+    if (remainingCents > 0 && status === 'AVAILABLE') {
+      availableCents += remainingCents;
+      availableCount += 1;
+    }
+  });
+
+  const recent = rows.slice(-15).reverse().map(function(row) {
+    const id = String(row[0] || '');
+    return {
+      id: id,
+      date: formatDate_(row[1]),
+      amountCents: Number(row[9] || 0),
+      remainingCents: Number(row[11] || 0),
+      provider: String(row[3] || ''),
+      label: String(row[4] || ''),
+      receiptUrl: String(row[7] || ''),
+      status: String(row[12] || ''),
+    };
+  }).filter(function(x) { return x.id; });
 
   return {
     availableCents: availableCents,
-    availableCount: expenses.length,
+    availableCount: availableCount,
     recent: recent,
   };
 }
@@ -157,9 +182,6 @@ function saveReceipt(payload) {
   lock.waitLock(30000);
 
   try {
-    ensureSchema_();
-    ensureFoldersConfigured_();
-
     if (!payload) throw new Error('Missing receipt data.');
 
     const amountCents = dollarsToCents_(payload.amount);
@@ -208,11 +230,13 @@ function saveReceipt(payload) {
       createAndLinkDocuments_(expenseId, documents);
     }
 
+    invalidateDashboardCache_();
+
     return {
       ok: true,
       expenseId: expenseId,
       receiptUrl: receipt.fileUrl,
-      availableCents: getAvailableExpenses_().reduce(function(sum, e) { return sum + e.remainingCents; }, 0),
+      amountCents: amountCents,
       documentCount: documents.length,
     };
   } finally {
@@ -225,9 +249,6 @@ function attachDocumentsToExpense(payload) {
   lock.waitLock(30000);
 
   try {
-    ensureSchema_();
-    ensureFoldersConfigured_();
-
     if (!payload || !payload.expenseId) throw new Error('Missing expense ID.');
 
     if (!expenseExists_(payload.expenseId)) {
@@ -251,7 +272,6 @@ function attachDocumentsToExpense(payload) {
 }
 
 function getExpenseDocuments(expenseId) {
-  ensureSchema_();
   if (!expenseId) throw new Error('Missing expense ID.');
 
   const docSheet = getSpreadsheet_().getSheetByName(SHEETS.DOCUMENTS);
@@ -307,7 +327,6 @@ function getExpenseDocuments(expenseId) {
 }
 
 function findMatches(requestedAmount) {
-  ensureSchema_();
   const targetCents = dollarsToCents_(requestedAmount);
   if (targetCents <= 0) throw new Error('Enter an amount greater than $0.');
 
@@ -337,8 +356,6 @@ function redeemMatch(payload) {
   lock.waitLock(30000);
 
   try {
-    ensureSchema_();
-
     if (!payload || !Array.isArray(payload.expenseIds) || !payload.expenseIds.length) {
       throw new Error('No receipts selected.');
     }
@@ -419,6 +436,7 @@ function redeemMatch(payload) {
     });
 
     SpreadsheetApp.flush();
+    invalidateDashboardCache_();
 
     return {
       ok: true,
@@ -557,7 +575,6 @@ function matchResponse_(selected, targetCents, approximate) {
         provider: x.provider || '',
         label: x.label || '',
         receiptUrl: x.receiptUrl || '',
-        documentCount: x.documentCount || 0,
       };
     }),
   };
@@ -602,8 +619,11 @@ function createAndLinkDocuments_(expenseId, documents) {
   const docSheet = ss.getSheetByName(SHEETS.DOCUMENTS);
   const linkSheet = ss.getSheetByName(SHEETS.EXPENSE_DOCUMENTS);
   const now = new Date();
+  const documentRows = [];
+  const linkRows = [];
+  const created = [];
 
-  const created = documents.map(function(doc) {
+  documents.forEach(function(doc) {
     const stored = createStoredFile_({
       folder: docFolder,
       payload: {
@@ -617,10 +637,12 @@ function createAndLinkDocuments_(expenseId, documents) {
     });
 
     const documentId = makeId_('DOC');
-    docSheet.appendRow([
+    const title = doc.title || stripExtension_(stored.fileName);
+
+    documentRows.push([
       documentId,
       doc.documentType,
-      doc.title || stripExtension_(stored.fileName),
+      title,
       doc.description,
       doc.issueDate || '',
       doc.expirationDate || '',
@@ -630,20 +652,21 @@ function createAndLinkDocuments_(expenseId, documents) {
       now,
     ]);
 
-    linkSheet.appendRow([
-      expenseId,
-      documentId,
-      'supporting',
-      now,
-    ]);
-
-    return {
+    linkRows.push([expenseId, documentId, 'supporting', now]);
+    created.push({
       documentId: documentId,
       type: doc.documentType,
-      title: doc.title || stripExtension_(stored.fileName),
+      title: title,
       fileUrl: stored.fileUrl,
-    };
+    });
   });
+
+  if (documentRows.length) {
+    docSheet.getRange(docSheet.getLastRow() + 1, 1, documentRows.length, DOCUMENT_HEADERS.length)
+      .setValues(documentRows);
+    linkSheet.getRange(linkSheet.getLastRow() + 1, 1, linkRows.length, EXPENSE_DOCUMENT_HEADERS.length)
+      .setValues(linkRows);
+  }
 
   return created;
 }
@@ -679,7 +702,6 @@ function getAvailableExpenses_() {
   if (lastRow < 2) return [];
 
   const rows = sheet.getRange(2, 1, lastRow - 1, EXPENSE_HEADERS.length).getValues();
-  const docCountMap = buildDocumentCountMap_();
 
   return rows.map(function(row, index) {
     const id = String(row[0] || '');
@@ -694,28 +716,12 @@ function getAvailableExpenses_() {
       label: String(row[4] || ''),
       receiptUrl: String(row[7] || ''),
       status: String(row[12] || ''),
-      documentCount: Number(docCountMap[id] || 0),
     };
   }).filter(function(x) {
     return x.id && x.remainingCents > 0 && x.status === 'AVAILABLE';
   });
 }
 
-function buildDocumentCountMap_() {
-  const sheet = getSpreadsheet_().getSheetByName(SHEETS.EXPENSE_DOCUMENTS);
-  const lastRow = sheet.getLastRow();
-  const map = {};
-  if (lastRow < 2) return map;
-
-  const rows = sheet.getRange(2, 1, lastRow - 1, EXPENSE_DOCUMENT_HEADERS.length).getValues();
-  rows.forEach(function(row) {
-    const expenseId = String(row[0] || '');
-    if (!expenseId) return;
-    map[expenseId] = Number(map[expenseId] || 0) + 1;
-  });
-
-  return map;
-}
 
 function ensureSchema_() {
   const ss = getSpreadsheet_();
@@ -799,20 +805,33 @@ function ensureSheet_(ss, name, headers) {
 }
 
 function getSettings_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(CACHE_KEYS.SETTINGS);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      // Rebuild below.
+    }
+  }
+
   const sheet = getSpreadsheet_().getSheetByName(SHEETS.SETTINGS);
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return {};
+  const settings = {};
 
-  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-  return values.reduce(function(out, row) {
-    if (row[0]) out[String(row[0])] = row[1];
-    return out;
-  }, {});
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    values.forEach(function(row) {
+      if (row[0]) settings[String(row[0])] = row[1];
+    });
+  }
+
+  cache.put(CACHE_KEYS.SETTINGS, JSON.stringify(settings), SETTINGS_CACHE_SECONDS);
+  return settings;
 }
 
 function getSetting_(key) {
-  const settings = getSettings_();
-  return settings[key] || '';
+  return getSettings_()[key] || '';
 }
 
 function upsertSetting_(key, value, notes) {
@@ -823,12 +842,24 @@ function upsertSetting_(key, value, notes) {
     for (let i = 0; i < rows.length; i++) {
       if (String(rows[i][0] || '') === key) {
         sheet.getRange(i + 2, 1, 1, 3).setValues([[key, value, notes || rows[i][2] || '']]);
+        CacheService.getScriptCache().remove(CACHE_KEYS.SETTINGS);
         return;
       }
     }
   }
 
   sheet.appendRow([key, value, notes || '']);
+  CacheService.getScriptCache().remove(CACHE_KEYS.SETTINGS);
+}
+
+function invalidateDashboardCache_() {
+  CacheService.getScriptCache().remove(CACHE_KEYS.DASHBOARD);
+}
+
+function invalidateRuntimeCaches_() {
+  const cache = CacheService.getScriptCache();
+  cache.remove(CACHE_KEYS.DASHBOARD);
+  cache.remove(CACHE_KEYS.SETTINGS);
 }
 
 function expenseExists_(expenseId) {
@@ -852,11 +883,15 @@ function getSupportingDocsFolder_() {
 }
 
 function getSpreadsheet_() {
+  if (spreadsheetHandle_) return spreadsheetHandle_;
+
   const id = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.SPREADSHEET_ID);
   if (!id) {
     throw new Error('SPREADSHEET_ID is not configured. Run setup("YOUR_SPREADSHEET_ID") once.');
   }
-  return SpreadsheetApp.openById(id);
+
+  spreadsheetHandle_ = SpreadsheetApp.openById(id);
+  return spreadsheetHandle_;
 }
 
 function getFirstParentFolder_(folder) {
