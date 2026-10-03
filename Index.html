@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --text: #17181a;
+      --muted: #6f7378;
+      --line: #e4e6e8;
+      --accent: #1f6feb;
+      --danger: #b42318;
+      --success: #137333;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 18px 14px 80px;
+    }
+
+    h1 {
+      margin: 2px 0 16px;
+      font-size: 25px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin: 0 0 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+
+    .balance-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .balance {
+      font-size: 34px;
+      font-weight: 750;
+      margin: 3px 0 4px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 13px 14px;
+      font-size: 15px;
+      font-weight: 650;
+      cursor: pointer;
+      background: #e9eef8;
+      color: #174ea6;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: white;
+      width: 100%;
+    }
+
+    button.secondary {
+      width: 100%;
+      background: #f0f2f4;
+      color: var(--text);
+    }
+
+    button.danger {
+      width: 100%;
+      background: #fff1f0;
+      color: var(--danger);
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: default;
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    label {
+      display: block;
+      margin: 13px 0 6px;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid #cfd3d8;
+      border-radius: 11px;
+      padding: 12px;
+      font: inherit;
+      background: white;
+      color: var(--text);
+    }
+
+    input:focus, textarea:focus {
+      outline: 2px solid rgba(31,111,235,.18);
+      border-color: var(--accent);
+    }
+
+    textarea {
+      min-height: 76px;
+      resize: vertical;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .hidden { display: none !important; }
+
+    .camera-box {
+      border: 1px dashed #b9bec5;
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+      background: #fafafa;
+    }
+
+    .camera-box input {
+      border: 0;
+      padding: 8px 0;
+      background: transparent;
+    }
+
+    #preview {
+      width: 100%;
+      max-height: 300px;
+      object-fit: contain;
+      border-radius: 10px;
+      margin-top: 10px;
+      background: #eee;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--success); }
+
+    .match {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    .match-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .match-total {
+      font-size: 22px;
+      font-weight: 750;
+    }
+
+    .match-diff {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .receipt-list {
+      margin: 12px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .receipt {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .receipt .meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    a { color: var(--accent); }
+
+    .recent-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .recent-row:last-child { border-bottom: 0; }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #edf7ed;
+      color: var(--success);
+      margin-left: 5px;
+    }
+
+    .note {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fff8e1;
+      font-size: 12px;
+      color: #6b5a00;
+      margin-top: 12px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: -2px;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 420px) {
+      .row { grid-template-columns: 1fr; }
+      .balance { font-size: 31px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>HSA Receipt Tracker</h1>
+
+    <div class="card">
+      <div class="balance-label">Available to reimburse</div>
+      <div id="availableBalance" class="balance">$—</div>
+      <div id="availableCount" class="subtle">Loading…</div>
+    </div>
+
+    <div class="tabs">
+      <button id="addTab" class="tab active" onclick="showTab('add')">Add receipt</button>
+      <button id="redeemTab" class="tab" onclick="showTab('redeem')">Reimburse</button>
+    </div>
+
+    <section id="addSection">
+      <div class="card">
+        <h2>Add receipt</h2>
+
+        <label>Receipt photo</label>
+        <div class="camera-box">
+          <input id="receiptFile" type="file" accept="image/*" capture="environment" onchange="previewReceipt()">
+          <img id="preview" class="hidden" alt="Receipt preview">
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Amount</label>
+            <input id="amount" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="42.18">
+          </div>
+          <div>
+            <label>Expense date</label>
+            <input id="expenseDate" type="date">
+          </div>
+        </div>
+
+        <label>Provider / merchant <span class="subtle">(optional)</span></label>
+        <input id="provider" type="text" placeholder="UCSF Dental, CVS, Costco…">
+
+        <label>Label <span class="subtle">(optional)</span></label>
+        <input id="label" type="text" placeholder="Dental, prescription, glasses…">
+
+        <label>Notes <span class="subtle">(optional)</span></label>
+        <textarea id="notes" placeholder="Anything useful for future you"></textarea>
+
+        <div style="height:14px"></div>
+        <button id="saveButton" class="primary" onclick="saveReceipt()">Save receipt</button>
+        <div id="saveStatus" class="status"></div>
+      </div>
+    </section>
+
+    <section id="redeemSection" class="hidden">
+      <div class="card">
+        <h2>Find receipts</h2>
+
+        <label>How much money do you need?</label>
+        <input id="requestedAmount" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="500.00">
+
+        <div style="height:14px"></div>
+        <button id="findButton" class="primary" onclick="findMatches()">Find closest matches</button>
+        <div id="findStatus" class="status"></div>
+
+        <div class="note">
+          “Reimburse” here only updates your receipt ledger. It does not initiate a withdrawal from your HSA provider.
+        </div>
+      </div>
+
+      <div id="matchResults"></div>
+    </section>
+
+    <div class="card">
+      <h2>Recent receipts</h2>
+      <div id="recentReceipts" class="subtle">Loading…</div>
+    </div>
+  </div>
+
+  <script>
+    let currentMatches = [];
+    let compressedReceipt = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('expenseDate').value = todayLocal();
+      refreshDashboard();
+    });
+
+    function todayLocal() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function money(cents) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+      }).format((Number(cents) || 0) / 100);
+    }
+
+    function showTab(name) {
+      const add = name === 'add';
+      document.getElementById('addSection').classList.toggle('hidden', !add);
+      document.getElementById('redeemSection').classList.toggle('hidden', add);
+      document.getElementById('addTab').classList.toggle('active', add);
+      document.getElementById('redeemTab').classList.toggle('active', !add);
+    }
+
+    function refreshDashboard() {
+      google.script.run
+        .withSuccessHandler(renderDashboard)
+        .withFailureHandler(err => {
+          document.getElementById('availableCount').textContent = errorMessage(err);
+        })
+        .getDashboardData();
+    }
+
+    function renderDashboard(data) {
+      document.getElementById('availableBalance').textContent = money(data.availableCents);
+      document.getElementById('availableCount').textContent =
+        `${data.availableCount} unreimbursed receipt${data.availableCount === 1 ? '' : 's'}`;
+
+      const recent = document.getElementById('recentReceipts');
+      if (!data.recent || !data.recent.length) {
+        recent.textContent = 'No receipts yet.';
+        return;
+      }
+
+      recent.innerHTML = data.recent.map(r => `
+        <div class="recent-row">
+          <div>
+            <div>${escapeHtml(r.provider || r.label || 'Receipt')}
+              ${r.status === 'AVAILABLE' ? '<span class="pill">available</span>' : ''}
+            </div>
+            <div class="subtle">${escapeHtml(r.date || '')} · ${escapeHtml(r.label || '')}</div>
+          </div>
+          <div style="text-align:right">
+            <div>${money(r.amountCents)}</div>
+            ${r.receiptUrl ? `<a href="${escapeAttr(r.receiptUrl)}" target="_blank" class="subtle">receipt</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function previewReceipt() {
+      const input = document.getElementById('receiptFile');
+      const file = input.files && input.files[0];
+      if (!file) {
+        compressedReceipt = null;
+        document.getElementById('preview').classList.add('hidden');
+        return;
+      }
+
+      setStatus('saveStatus', 'Preparing image…', '');
+      try {
+        compressedReceipt = await compressImage(file);
+        const img = document.getElementById('preview');
+        img.src = `data:${compressedReceipt.mimeType};base64,${compressedReceipt.imageBase64}`;
+        img.classList.remove('hidden');
+        setStatus('saveStatus', '', '');
+      } catch (e) {
+        setStatus('saveStatus', e.message || String(e), 'error');
+      }
+    }
+
+    function compressImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onerror = () => reject(new Error('Could not read that image.'));
+        reader.onload = () => {
+          const originalDataUrl = reader.result;
+          const img = new Image();
+
+          img.onerror = () => {
+            // Fallback: upload original bytes if the browser cannot decode it for compression.
+            const base64 = String(originalDataUrl).split(',')[1];
+            resolve({
+              imageBase64: base64,
+              mimeType: file.type || 'image/jpeg',
+              fileName: file.name || 'receipt.jpg'
+            });
+          };
+
+          img.onload = () => {
+            const maxDimension = 1800;
+            let width = img.width;
+            let height = img.height;
+            const scale = Math.min(1, maxDimension / Math.max(width, height));
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+            resolve({
+              imageBase64: dataUrl.split(',')[1],
+              mimeType: 'image/jpeg',
+              fileName: (file.name || 'receipt').replace(/\.[^.]+$/, '') + '.jpg'
+            });
+          };
+
+          img.src = originalDataUrl;
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function saveReceipt() {
+      const button = document.getElementById('saveButton');
+      const amount = document.getElementById('amount').value;
+      const expenseDate = document.getElementById('expenseDate').value;
+
+      if (!compressedReceipt) {
+        setStatus('saveStatus', 'Take or choose a receipt photo first.', 'error');
+        return;
+      }
+      if (!amount || Number(amount) <= 0) {
+        setStatus('saveStatus', 'Enter a valid amount.', 'error');
+        return;
+      }
+      if (!expenseDate) {
+        setStatus('saveStatus', 'Choose the expense date.', 'error');
+        return;
+      }
+
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner"></span>Saving…';
+      setStatus('saveStatus', '', '');
+
+      const payload = {
+        ...compressedReceipt,
+        amount,
+        expenseDate,
+        provider: document.getElementById('provider').value,
+        label: document.getElementById('label').value,
+        notes: document.getElementById('notes').value
+      };
+
+      google.script.run
+        .withSuccessHandler(result => {
+          button.disabled = false;
+          button.textContent = 'Save receipt';
+          setStatus('saveStatus', `Saved ${result.expenseId}.`, 'success');
+          resetReceiptForm();
+          refreshDashboard();
+        })
+        .withFailureHandler(err => {
+          button.disabled = false;
+          button.textContent = 'Save receipt';
+          setStatus('saveStatus', errorMessage(err), 'error');
+        })
+        .saveReceipt(payload);
+    }
+
+    function resetReceiptForm() {
+      document.getElementById('receiptFile').value = '';
+      document.getElementById('amount').value = '';
+      document.getElementById('provider').value = '';
+      document.getElementById('label').value = '';
+      document.getElementById('notes').value = '';
+      document.getElementById('expenseDate').value = todayLocal();
+      document.getElementById('preview').classList.add('hidden');
+      compressedReceipt = null;
+    }
+
+    function findMatches() {
+      const amount = document.getElementById('requestedAmount').value;
+      if (!amount || Number(amount) <= 0) {
+        setStatus('findStatus', 'Enter a valid amount.', 'error');
+        return;
+      }
+
+      const button = document.getElementById('findButton');
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner"></span>Searching…';
+      setStatus('findStatus', '', '');
+      document.getElementById('matchResults').innerHTML = '';
+
+      google.script.run
+        .withSuccessHandler(matches => {
+          button.disabled = false;
+          button.textContent = 'Find closest matches';
+          currentMatches = matches || [];
+          renderMatches();
+        })
+        .withFailureHandler(err => {
+          button.disabled = false;
+          button.textContent = 'Find closest matches';
+          setStatus('findStatus', errorMessage(err), 'error');
+        })
+        .findMatches(amount);
+    }
+
+    function renderMatches() {
+      const container = document.getElementById('matchResults');
+      if (!currentMatches.length) {
+        container.innerHTML = '<div class="card subtle">No unreimbursed receipts are available.</div>';
+        return;
+      }
+
+      container.innerHTML = currentMatches.map((m, i) => {
+        const diff = m.differenceCents;
+        const diffText = diff === 0
+          ? 'exact match'
+          : `${money(Math.abs(diff))} ${diff > 0 ? 'over' : 'under'} requested`;
+
+        return `
+          <div class="card match">
+            <div class="match-top">
+              <div>
+                <div class="subtle">Option ${i + 1}${m.approximate ? ' · approximate search' : ''}</div>
+                <div class="match-total">${money(m.totalCents)}</div>
+              </div>
+              <div class="match-diff">${diffText}</div>
+            </div>
+
+            <div class="receipt-list">
+              ${m.receipts.map(r => `
+                <div class="receipt">
+                  <div>
+                    <div>${escapeHtml(r.provider || r.label || 'Receipt')}</div>
+                    <div class="meta">${escapeHtml(r.date || '')} · ${escapeHtml(r.label || '')}</div>
+                  </div>
+                  <div style="text-align:right">
+                    <div>${money(r.amountCents)}</div>
+                    ${r.receiptUrl ? `<a href="${escapeAttr(r.receiptUrl)}" target="_blank" class="meta">view</a>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <button class="primary" onclick="redeem(${i}, this)">
+              Mark ${money(m.totalCents)} reimbursed
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function redeem(index, button) {
+      const match = currentMatches[index];
+      if (!match) return;
+
+      const message =
+        `Mark ${money(match.totalCents)} across ${match.receipts.length} receipt` +
+        `${match.receipts.length === 1 ? '' : 's'} as reimbursed?\n\n` +
+        `This updates the ledger only; it does not move money from your HSA.`;
+
+      if (!confirm(message)) return;
+
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner"></span>Updating ledger…';
+
+      google.script.run
+        .withSuccessHandler(result => {
+          currentMatches = [];
+          document.getElementById('matchResults').innerHTML = `
+            <div class="card">
+              <div style="font-weight:700;color:var(--success)">Reimbursement recorded</div>
+              <div class="subtle" style="margin-top:5px">
+                ${escapeHtml(result.reimbursementId)} · ${money(result.matchedCents)}
+              </div>
+            </div>
+          `;
+          refreshDashboard();
+        })
+        .withFailureHandler(err => {
+          button.disabled = false;
+          button.textContent = `Mark ${money(match.totalCents)} reimbursed`;
+          setStatus('findStatus', errorMessage(err), 'error');
+          refreshDashboard();
+        })
+        .redeemMatch({
+          expenseIds: match.expenseIds,
+          requestedCents: match.requestedCents,
+          notes: ''
+        });
+    }
+
+    function setStatus(id, text, type) {
+      const el = document.getElementById(id);
+      el.textContent = text || '';
+      el.className = `status ${type || ''}`;
+    }
+
+    function errorMessage(err) {
+      if (!err) return 'Something went wrong.';
+      return err.message || String(err);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+  </script>
+</body>
+</html>
