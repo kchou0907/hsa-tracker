@@ -246,6 +246,21 @@ This is what lets one expense have multiple supporting files.
 
 ---
 
+## Performance
+
+The runtime path is intentionally kept small:
+
+- schema and Drive-folder checks run during `setup()`, not on every web request
+- the dashboard uses one Sheets read on a cache miss and is cached for 5 minutes
+- settings are cached for 1 hour
+- supporting-document relationships are loaded only when you tap **View docs**
+- receipt images are resized/compressed on the phone before upload
+- multi-document metadata rows are written to Sheets in batches
+
+Receipt uploads can still take a moment because Apps Script web apps send the file through the Apps Script runtime and Google Drive. A completely cold Apps Script invocation can also be slower than a warm one.
+
+If you edit ledger rows manually in Google Sheets, the dashboard may show cached data for up to about 5 minutes. Normal writes through the web app invalidate the dashboard cache immediately.
+
 ## Suggested future improvements
 
 - OCR for receipt autofill
