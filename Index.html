@@ -84,13 +84,33 @@
       background: #fafafa;
     }
     .camera-box input, .upload-box input { border: 0; padding: 8px 0; background: transparent; }
-    #preview {
+    #receiptPreview { margin-top: 10px; }
+    #previewImage {
       width: 100%;
-      max-height: 300px;
+      max-height: 320px;
       object-fit: contain;
       border-radius: 10px;
-      margin-top: 10px;
       background: #eee;
+    }
+    #previewPdf {
+      width: 100%;
+      height: 420px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+    }
+    .file-preview-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: left;
+      background: white;
+      word-break: break-word;
+    }
+    .preview-actions {
+      margin-top: 8px;
+      font-size: 13px;
+      text-align: left;
     }
     .status { margin-top: 10px; font-size: 13px; min-height: 18px; }
     .status.error { color: var(--danger); }
@@ -246,10 +266,21 @@
       <div class="card">
         <h2>Add receipt</h2>
 
-        <label>Receipt photo</label>
+        <label>Receipt / expense document</label>
         <div class="camera-box">
-          <input id="receiptFile" type="file" accept="image/*" capture="environment" onchange="previewReceipt()">
-          <img id="preview" class="hidden" alt="Receipt preview">
+          <input id="receiptFile" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx,.rtf,.txt,.xls,.xlsx" onchange="previewReceipt()">
+          <div id="receiptPreview" class="hidden">
+            <img id="previewImage" class="hidden" alt="Receipt preview">
+            <iframe id="previewPdf" class="hidden" title="PDF preview"></iframe>
+            <div id="previewFileCard" class="hidden file-preview-card">
+              <strong id="previewFileName"></strong>
+              <div id="previewFileMeta" class="subtle" style="margin-top:4px"></div>
+            </div>
+            <div class="preview-actions">
+              <a id="openPreview" class="hidden" target="_blank" rel="noopener">Open preview</a>
+            </div>
+          </div>
+          <div class="subtle" style="margin-top:6px">Images, PDFs, Word documents, text files, and common office files are supported.</div>
         </div>
 
         <div class="row">
@@ -381,8 +412,9 @@
 
   <script>
     let currentMatches = [];
-    let compressedReceipt = null;
+    let preparedReceipt = null;
     let selectedExpenseIdForAttach = null;
+    let receiptPreviewObjectUrl = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('expenseDate').value = todayLocal();
@@ -469,22 +501,92 @@
     async function previewReceipt() {
       const input = document.getElementById('receiptFile');
       const file = input.files && input.files[0];
+
+      clearReceiptPreview();
+
       if (!file) {
-        compressedReceipt = null;
-        document.getElementById('preview').classList.add('hidden');
+        preparedReceipt = null;
         return;
       }
 
-      setStatus('saveStatus', 'Preparing image…', '');
+      setStatus('saveStatus', 'Preparing file…', '');
+
       try {
-        compressedReceipt = await prepareUploadFile(file, true);
-        const img = document.getElementById('preview');
-        img.src = `data:${compressedReceipt.mimeType};base64,${compressedReceipt.fileBase64}`;
-        img.classList.remove('hidden');
+        preparedReceipt = await prepareUploadFile(file, true);
+        renderReceiptPreview(file, preparedReceipt);
         setStatus('saveStatus', '', '');
       } catch (e) {
+        preparedReceipt = null;
+        clearReceiptPreview();
         setStatus('saveStatus', e.message || String(e), 'error');
       }
+    }
+
+    function renderReceiptPreview(file, prepared) {
+      const preview = document.getElementById('receiptPreview');
+      const image = document.getElementById('previewImage');
+      const pdf = document.getElementById('previewPdf');
+      const fileCard = document.getElementById('previewFileCard');
+      const openLink = document.getElementById('openPreview');
+
+      preview.classList.remove('hidden');
+
+      const isImage = String(prepared.mimeType || '').startsWith('image/');
+      const isPdf =
+        prepared.mimeType === 'application/pdf' ||
+        /\.pdf$/i.test(prepared.fileName || file.name || '');
+
+      if (isImage) {
+        image.src = 'data:' + prepared.mimeType + ';base64,' + prepared.fileBase64;
+        image.classList.remove('hidden');
+        return;
+      }
+
+      receiptPreviewObjectUrl = URL.createObjectURL(file);
+      openLink.href = receiptPreviewObjectUrl;
+      openLink.classList.remove('hidden');
+
+      if (isPdf) {
+        pdf.src = receiptPreviewObjectUrl;
+        pdf.classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('previewFileName').textContent = file.name || 'Document';
+      document.getElementById('previewFileMeta').textContent =
+        (file.type || 'Unknown file type') + ' · ' + formatFileSize(file.size);
+      fileCard.classList.remove('hidden');
+    }
+
+    function clearReceiptPreview() {
+      if (receiptPreviewObjectUrl) {
+        URL.revokeObjectURL(receiptPreviewObjectUrl);
+        receiptPreviewObjectUrl = null;
+      }
+
+      const preview = document.getElementById('receiptPreview');
+      const image = document.getElementById('previewImage');
+      const pdf = document.getElementById('previewPdf');
+      const fileCard = document.getElementById('previewFileCard');
+      const openLink = document.getElementById('openPreview');
+
+      preview.classList.add('hidden');
+      image.classList.add('hidden');
+      image.removeAttribute('src');
+      pdf.classList.add('hidden');
+      pdf.removeAttribute('src');
+      fileCard.classList.add('hidden');
+      openLink.classList.add('hidden');
+      openLink.removeAttribute('href');
+      document.getElementById('previewFileName').textContent = '';
+      document.getElementById('previewFileMeta').textContent = '';
+    }
+
+    function formatFileSize(bytes) {
+      const n = Number(bytes || 0);
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
     function addSupportDocRow(containerId) {
@@ -605,8 +707,8 @@
       const amount = document.getElementById('amount').value;
       const expenseDate = document.getElementById('expenseDate').value;
 
-      if (!compressedReceipt) {
-        setStatus('saveStatus', 'Take or choose a receipt photo first.', 'error');
+      if (!preparedReceipt) {
+        setStatus('saveStatus', 'Choose a receipt or expense document first.', 'error');
         return;
       }
       if (!amount || Number(amount) <= 0) {
@@ -625,7 +727,7 @@
       try {
         const documents = await collectSupportDocuments('supportDocsContainer');
         const payload = {
-          receipt: compressedReceipt,
+          receipt: preparedReceipt,
           amount: amount,
           expenseDate: expenseDate,
           provider: document.getElementById('provider').value,
@@ -665,9 +767,9 @@
       document.getElementById('label').value = '';
       document.getElementById('notes').value = '';
       document.getElementById('expenseDate').value = todayLocal();
-      document.getElementById('preview').classList.add('hidden');
+      clearReceiptPreview();
       document.getElementById('supportDocsContainer').innerHTML = '';
-      compressedReceipt = null;
+      preparedReceipt = null;
     }
 
     function openDocumentList(expenseId) {
