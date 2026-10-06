@@ -5,7 +5,7 @@ A mobile-friendly Google Apps Script web app for long-term HSA receipt storage a
 
 This version supports:
 
-- receipt photo upload from your phone
+- receipt / expense-document upload from your phone (images, PDFs, and common document formats)
 - HSA-eligible amount / date / label / notes
 - Google Drive storage for original files
 - Google Sheets ledger + audit trail
@@ -150,9 +150,11 @@ Open the `/exec` URL on your phone and add it to your home screen.
 
 You can:
 
-- take a receipt photo directly from your phone camera
+- take a receipt photo or choose an existing image, PDF, Word document, text file, or common office file
 - enter amount / expense date / provider / label / notes
 - optionally add one or more supporting documents
+
+Images preview directly in the app. PDFs preview inline when the browser supports it and also include an **Open preview** fallback. Other document types show a filename/type/size card and are stored in Drive.
 
 Each supporting document includes:
 
@@ -260,7 +262,7 @@ The runtime path is intentionally kept small:
 - the dashboard uses one Sheets read on a cache miss and is cached for 5 minutes
 - settings are cached for 1 hour
 - supporting-document relationships are loaded only when you tap **View docs**
-- receipt images are resized/compressed on the phone before upload
+- receipt images are resized/compressed on the phone before upload; PDFs and other documents are uploaded as-is
 - multi-document metadata rows are written to Sheets in batches
 
 Receipt uploads can still take a moment because Apps Script web apps send the file through the Apps Script runtime and Google Drive. A completely cold Apps Script invocation can also be slower than a warm one.
@@ -271,6 +273,6 @@ If you edit ledger rows manually in Google Sheets, the dashboard may show cached
 
 - OCR for receipt autofill
 - export reimbursement packet (selected receipts + supporting docs)
-- expiration reminders for letters of medical necessity
+- optional LMN coverage-period reminders when a letter includes a valid-through date
 - ability to reuse one supporting document across multiple expenses from the UI
 - search / filter by provider, date, reimbursement status, or document type
