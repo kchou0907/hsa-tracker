@@ -191,7 +191,7 @@ function saveReceipt(payload) {
     if (!expenseDate) throw new Error('Please enter a valid expense date.');
 
     if (!payload.receipt || !payload.receipt.fileBase64) {
-      throw new Error('Please attach a receipt photo.');
+      throw new Error('Please attach a receipt or expense document.');
     }
 
     const expenseId = makeId_('EXP');
