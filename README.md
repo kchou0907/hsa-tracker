@@ -11,6 +11,7 @@ This version supports:
 - Google Sheets ledger + audit trail
 - reimbursement matching by closest total
 - immutable reimbursement history
+- optional one-time anonymous install telemetry for public templates
 - **supporting documents** like:
   - Letters of Medical Necessity
   - Prescriptions
@@ -62,6 +63,8 @@ The `Documents` + `ExpenseDocuments` pair lets one expense have multiple support
 
 - `Code.gs` — server-side Apps Script logic
 - `Index.html` — mobile web UI
+- `Telemetry.gs` — optional anonymous install reporting used by public templates
+- `telemetry-counter/Counter.gs` — example code for the separate standalone counter web app
 - `appsscript.json` — Apps Script manifest
 - `README.md`
 
@@ -97,6 +100,7 @@ Replace the default files with:
 
 - `Code.gs`
 - `Index.html`
+- `Telemetry.gs`
 - `appsscript.json`
 
 ### 4. Run setup once
@@ -127,6 +131,75 @@ If you are upgrading from the earlier version, `setup()` also acts as a schema m
 - `Documents`
 - `ExpenseDocuments`
 - `SUPPORTING_DOCS_FOLDER_ID`
+
+### Optional: enable anonymous install counting
+
+If you are publishing a source/template spreadsheet and want to track how many copied trackers actually run `setup()`, the repository includes an optional one-time install counter.
+
+The counter is deliberately separate from the HSA app deployment:
+
+```text
+Copied HSA tracker
+      ↓
+setup()
+      ↓
+Telemetry.gs
+      ↓
+POST to separate counter web app
+      ↓
+source spreadsheet Instructions!B21 += 1
+```
+
+To enable it:
+
+1. Create a **separate standalone Apps Script project** for the counter.
+2. Copy `telemetry-counter/Counter.gs` into that project.
+3. Replace `PASTE_SOURCE_SPREADSHEET_ID_HERE` with the ID of your source/template spreadsheet.
+4. Deploy that standalone project as a web app:
+   - **Execute as:** Me
+   - **Who has access:** Anyone
+5. Copy its `/exec` URL.
+6. In the HSA template's `Telemetry.gs`, replace `PASTE_COUNTER_WEB_APP_EXEC_URL_HERE` with that URL.
+7. Make sure the source spreadsheet has an `Instructions` tab and that `B21` is the installation counter.
+
+The HSA app's `setup()` calls `reportInstall_()` after setup succeeds. If telemetry fails, the error is logged and setup still completes.
+
+Each copied script project records:
+
+```text
+INSTALL_REPORTED=true
+```
+
+after a successful counter response, so rerunning `setup()` in the same copy does not intentionally increment the counter again.
+
+Because telemetry uses `UrlFetchApp`, Apps Script may request permission to connect to an external service when the user first authorizes the copied tracker.
+
+#### What telemetry sends
+
+The install ping intentionally sends **no request payload**. It does not send:
+
+- Google account or email
+- spreadsheet ID
+- HSA balances
+- expense amounts
+- receipt filenames or contents
+- medical information
+
+The counter endpoint only receives a request meaning, effectively, “increment the installation counter by one.”
+
+The number should be described as **tracker installations / trackers created**, not necessarily unique people. A public endpoint can also be spammed, so this is useful lightweight adoption telemetry rather than tamper-proof analytics.
+
+#### Counter security
+
+Keep the counter in its own Apps Script project and keep its capabilities narrow. The included example hardcodes:
+
+- the source spreadsheet
+- the `Instructions` sheet
+- cell `B21`
+
+It does **not** accept a spreadsheet ID, sheet name, range, or value from the caller. This limits a public caller to triggering the counter behavior you explicitly wrote.
+
+---
 
 ### 5. Deploy the web app
 
@@ -251,6 +324,7 @@ This is what lets one expense have multiple supporting files.
 - Receipts and supporting documents are stored in Google Drive.
 - Keep your reimbursement history. Do not delete old reimbursed rows.
 - You should still use your own judgment on whether an expense is HSA-eligible.
+- Install telemetry is optional and disabled until `Telemetry.gs` is configured with a counter web-app URL.
 
 ---
 
