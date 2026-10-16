@@ -97,6 +97,13 @@ function setup(spreadsheetId) {
   invalidateRuntimeCaches_();
   getDashboardData();
 
+  try {
+    reportInstall_();
+  } catch (e) {
+    // Telemetry is best-effort and must never block setup.
+    console.warn('Install reporting failed:', e);
+  }
+
   return {
     ok: true,
     spreadsheetId: getSpreadsheet_().getId(),
